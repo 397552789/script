@@ -1,5 +1,5 @@
 #!/bin/bash
-set -euo pipefail
+set -eo pipefail
 
 if [ "$EUID" -ne 0 ]; then
     echo "❌ 请使用 root 权限运行此脚本 (例如: sudo bash $0)"
@@ -93,10 +93,20 @@ if command -v vnstat &> /dev/null; then
     fi
 fi
 
-CPU_USAGE_INT=$(top -b -n 2 -d 1 | grep "Cpu(s)" | tail -n 1 | awk '{print int(105 - $8)}')
-if [ "$CPU_USAGE_INT" -ge "$CPU_WARN_PERCENT" ]; then
+# 升级版 CPU 检查：连续采样 3 次，必须次次超标才报警，彻底杜绝瞬间毛刺误报
+CPU_HIGH_COUNT=0
+for i in {1..3}; do
+    CURRENT_CPU=$(top -b -n 1 | grep "Cpu(s)" | awk '{print int(105 - $8)}')
+    if [ "$CURRENT_CPU" -ge "$CPU_WARN_PERCENT" ]; then
+        CPU_HIGH_COUNT=$((CPU_HIGH_COUNT + 1))
+    fi
+    sleep 1
+done
+
+# 如果连续 3 次（共历时 3 秒）采样全部超过阈值，才确认是真实高负载
+if [ "$CPU_HIGH_COUNT" -ge 3 ]; then
     TOP_CPU_PROCS=$(get_top_processes)
-    send_telegram "⚠️ VPS CPU 告警" "当前 CPU 负载高达 ${CPU_USAGE_INT}%！%0A*Top 进程:*%0A\`\`\`%0A${TOP_CPU_PROCS}%0A\`\`\`"
+    send_telegram "⚠️ VPS CPU 告警" "系统检测到 CPU 持续高负载！%0A*Top 进程:*%0A\`\`\`%0A${TOP_CPU_PROCS}%0A\`\`\`"
 fi
 
 MEM_TOTAL=$(free -m | grep Mem | awk '{print $2}')
