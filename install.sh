@@ -183,7 +183,7 @@ echo "✅ 定时任务配置成功（巡检每5分钟一次，流量报告0点/1
 cat << 'UPDATE_EOF' > /usr/local/bin/vps-update
 #!/bin/bash
 # 替换为你的 GitHub Raw 链接
-REPO_RAW_URL="https://raw.githubusercontent.com/你的用户名/仓库名/main/install.sh"
+REPO_RAW_URL="https://raw.githubusercontent.com/397552789/script/refs/heads/main/install.sh"
 echo "🔄 正在从 GitHub 检查并更新 VPS 监控脚本..."
 bash <(curl -sL "$REPO_RAW_URL")
 UPDATE_EOF
