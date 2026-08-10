@@ -89,7 +89,7 @@ if command -v vnstat &> /dev/null; then
 接口: ${INTERFACE} 
 本月累计(入站): ${MONTH_TOTAL_RX_GIB} GiB 
 本月累计(出站): ${MONTH_TOTAL_GIB} GiB
-今日流量(出站): ${DAY_TOTAL_GIB} GiB 
+今日流量(出站): ${DAY_TOTAL_GIB} MiB 
 已用比例(出站): ${USED_PERCENT}%"
             timeout 15 curl -s -X POST "$API_URL" -d "chat_id=${CHAT_ID}" --data-urlencode "text=${MESSAGE}" >/dev/null
             exit 0
