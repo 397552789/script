@@ -14,7 +14,6 @@ echo "    VPS 监控与安全一体化脚本 - 安装/更新向导    "
 echo "=========================================="
 echo ""
 
-# 配置文件持久化路径
 CONFIG_FILE="/etc/vps_monitor.conf"
 if [ -f "$CONFIG_FILE" ]; then
     source "$CONFIG_FILE"
@@ -32,15 +31,14 @@ read -p "请输入网卡名称 (默认 ens4): " input_dev
 [ -n "$input_dev" ] && INTERFACE="$input_dev"
 [ -z "${INTERFACE:-}" ] && INTERFACE="ens4"
 
-# 新增：询问是否开启防夜间扣费定时断网功能
 echo ""
 read -p "是否开启夜间定时断网/防扣费功能？(y/N): " enable_net_control
 enable_net_control=${enable_net_control:-N}
 
 if [[ "$enable_net_control" =~ ^[Yy]$ ]]; then
-    read -p "请输入每天断网开始时间 (24小时制，例如 02): " net_stop_hour
+    read -p "请输入每天断网开始时间（24小时制数字，例如 2 或 16）: " net_stop_hour
     net_stop_hour=${net_stop_hour:-2}
-    read -p "请输入每天恢复网络时间 (24小时制，例如 06): " net_start_hour
+    read -p "请输入每天恢复网络时间（24小时制数字，例如 6 或 23）: " net_start_hour
     net_start_hour=${net_start_hour:-6}
     ENABLE_NET_LIMIT="true"
 else
@@ -59,9 +57,7 @@ NET_START_HOUR="$net_start_hour"
 CONF
 chmod 600 "$CONFIG_FILE"
 
-# ==========================================
-# 1. 写入综合监控脚本 /opt/vps-monitor/vps_monitor.sh
-# ==========================================
+# 1. 写入综合监控脚本
 cat << 'MONITOR_EOF' > "$INSTALL_DIR/vps_monitor.sh"
 #!/usr/bin/env bash
 set -eo pipefail
@@ -171,9 +167,7 @@ MONITOR_EOF
 
 chmod +x "$INSTALL_DIR/vps_monitor.sh"
 
-# ==========================================
-# 2. 写入 SSH 登录/退出通知脚本 /opt/vps-monitor/ssh_notify.sh
-# ==========================================
+# 2. 写入 SSH 通知脚本
 cat << 'SSH_EOF' > "$INSTALL_DIR/ssh_notify.sh"
 #!/usr/bin/env bash
 source /etc/vps_monitor.conf
@@ -193,15 +187,12 @@ else
 fi
 
 MESSAGE="*${TITLE}*%0A${BODY}"
-
 curl -s -X POST "$API_URL" -d "chat_id=${CHAT_ID}" --data-urlencode "text=${MESSAGE}" -d "parse_mode=Markdown" >/dev/null &
 SSH_EOF
 
 chmod +x "$INSTALL_DIR/ssh_notify.sh"
 
-# ==========================================
-# 3. 写入防火墙断网控制脚本 /opt/vps-monitor/net_control.sh
-# ==========================================
+# 3. 写入断网控制脚本
 cat << 'NET_EOF' > "$INSTALL_DIR/net_control.sh"
 #!/usr/bin/env bash
 source /etc/vps_monitor.conf
@@ -220,30 +211,29 @@ NET_EOF
 
 chmod +x "$INSTALL_DIR/net_control.sh"
 
-# 4. 绑定 SSH PAM 钩子
+# 4. 绑定 SSH 钩子
 if ! grep -q "pam_exec.so seteuid $INSTALL_DIR/ssh_notify.sh" /etc/pam.d/sshd; then
     echo "session optional pam_exec.so seteuid $INSTALL_DIR/ssh_notify.sh" >> /etc/pam.d/sshd
     echo "✅ SSH 登录/退出实时通知已绑定成功"
 fi
 
 # ==========================================
-# 5. 配置干净且精准的 Crontab 定时任务
+# 5. 安全规范配置 Crontab 定时任务（加入空值保护与防错校验）
 # ==========================================
-# 清理所有旧的 vps-monitor 相关定时任务
 crontab -l 2>/dev/null | grep -v "vps_monitor.sh" | grep -v "net_control.sh" | crontab -
 
-# 写入常规巡检与流量报告任务
 (crontab -l 2>/dev/null; echo "*/5 * * * * /bin/bash $INSTALL_DIR/vps_monitor.sh") | crontab -
 (crontab -l 2>/dev/null; echo "0 0,15 * * * /bin/bash $INSTALL_DIR/vps_monitor.sh report") | crontab -
 
-# 如果用户开启了夜间防扣费定时断网，则写入对应的防火墙开关任务
-if [ "$ENABLE_NET_LIMIT" = "true" ]; then
-    (crontab -l 2>/dev/null; echo "0 $NET_STOP_HOUR * * * /bin/bash $INSTALL_DIR/net_control.sh stop") | crontab -
-    (crontab -l 2>/dev/null; echo "0 $NET_START_HOUR * * * /bin/bash $INSTALL_DIR/net_control.sh start") | crontab -
-    echo "✅ 定时断网防扣费已启用: 每天 ${NET_STOP_HOUR}:00 至 ${NET_START_HOUR}:00 自动拦截流量"
+# 严格校验断网时间变量是否为纯数字，防止 crontab 报错
+if [ "$ENABLE_NET_LIMIT" = "true" ] && [[ "$net_stop_hour" =~ ^[0-9]+$ ]] && [[ "$net_start_hour" =~ ^[0-9]+$ ]]; then
+    (crontab -l 2>/dev/null; echo "0 $net_stop_hour * * * /bin/bash $INSTALL_DIR/net_control.sh stop") | crontab -
+    (crontab -l 2>/dev/null; echo "0 $net_start_hour * * * /bin/bash $INSTALL_DIR/net_control.sh start") | crontab -
+    echo "✅ 定时断网防扣费已启用: 每天 ${net_stop_hour}:00 至 ${net_start_hour}:00 自动拦截流量"
 fi
 
 echo "✅ 定时任务配置成功"
+
 
 # ==========================================
 # 6. 注册全局一键更新命令 vps-update
@@ -262,3 +252,4 @@ echo "=========================================="
 echo "🎉 脚本安装与更新全部完成！"
 echo "👉 以后升级只需在终端敲入: vps-update"
 echo "=========================================="
+
