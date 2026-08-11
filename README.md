@@ -4,3 +4,4 @@
 2、系统异常时发送信息至tg
 3、ssh登录时发送信息至tg
 4、脚本更新命令：sudo vps-update
+5、手动流量通知：bash /opt/vps-monitor/vps_monitor.sh report
