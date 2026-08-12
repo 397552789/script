@@ -1,4 +1,5 @@
 #!/bin/bash
+# 严格模式：遇到未定义变量或命令失败时报错退出（已对可选参数做兼容处理）
 set -eo pipefail
 
 if [ "$EUID" -ne 0 ]; then
@@ -14,6 +15,7 @@ echo "    VPS 监控与安全一体化脚本 - 安装/更新向导    "
 echo "=========================================="
 echo ""
 
+# 配置文件持久化路径
 CONFIG_FILE="/etc/vps_monitor.conf"
 if [ -f "$CONFIG_FILE" ]; then
     source "$CONFIG_FILE"
@@ -31,33 +33,16 @@ read -p "请输入网卡名称 (默认 ens4): " input_dev
 [ -n "$input_dev" ] && INTERFACE="$input_dev"
 [ -z "${INTERFACE:-}" ] && INTERFACE="ens4"
 
-echo ""
-read -p "是否开启夜间定时断网/防扣费功能？(y/N): " enable_net_control
-enable_net_control=${enable_net_control:-N}
-
-if [[ "$enable_net_control" =~ ^[Yy]$ ]]; then
-    read -p "请输入每天断网开始时间（24小时制数字，例如 2 或 16）: " net_stop_hour
-    net_stop_hour=${net_stop_hour:-2}
-    read -p "请输入每天恢复网络时间（24小时制数字，例如 6 或 23）: " net_start_hour
-    net_start_hour=${net_start_hour:-6}
-    ENABLE_NET_LIMIT="true"
-else
-    ENABLE_NET_LIMIT="false"
-    net_stop_hour="2"
-    net_start_hour="6"
-fi
-
 cat << CONF > "$CONFIG_FILE"
 TOKEN="$TOKEN"
 CHAT_ID="$CHAT_ID"
 INTERFACE="$INTERFACE"
-ENABLE_NET_LIMIT="$ENABLE_NET_LIMIT"
-NET_STOP_HOUR="$net_stop_hour"
-NET_START_HOUR="$net_start_hour"
 CONF
 chmod 600 "$CONFIG_FILE"
 
-# 1. 写入综合监控脚本
+# ==========================================
+# 1. 写入综合监控脚本 /opt/vps-monitor/vps_monitor.sh
+# ==========================================
 cat << 'MONITOR_EOF' > "$INSTALL_DIR/vps_monitor.sh"
 #!/usr/bin/env bash
 set -eo pipefail
@@ -84,6 +69,7 @@ get_top_processes() {
     ps -eo pid,%cpu,%mem,comm --sort=-%cpu | head -n 4 | tail -n +1
 }
 
+# -------- 流量统计与报告逻辑 --------
 if command -v vnstat &> /dev/null; then
     JSON_DATA="$(timeout 10 vnstat --json || echo "{}")"
     if [ "$JSON_DATA" != "{}" ]; then
@@ -97,6 +83,7 @@ if command -v vnstat &> /dev/null; then
         DAY_TOTAL_GIB="$(awk "BEGIN {printf \"%.4f\", $DAY_TX_KIB / 1024 / 1024}")"
         USED_PERCENT="$(awk "BEGIN {printf \"%.1f\", ($MONTH_TOTAL_GIB / $MONTH_LIMIT_GIB) * 100}")"
 
+        # 核心修复：绝对只在明确传入 report 参数时才发送流量报告，绝不在后台巡检中自动误发
         if [ "${1:-}" = "report" ]; then
             MESSAGE="🚦 GCP出站流量报告 
 接口: ${INTERFACE} 
@@ -110,6 +97,7 @@ if command -v vnstat &> /dev/null; then
     fi
 fi
 
+# -------- 系统资源与异常攻击巡检逻辑（带防毛刺确认）--------
 CPU_HIGH_COUNT=0
 for i in {1..3}; do
     CURRENT_CPU=$(top -b -n 1 | grep "Cpu(s)" | awk '{print int(105 - $8)}')
@@ -167,7 +155,9 @@ MONITOR_EOF
 
 chmod +x "$INSTALL_DIR/vps_monitor.sh"
 
-# 2. 写入 SSH 通知脚本
+# ==========================================
+# 2. 写入 SSH 登录/退出通知脚本 /opt/vps-monitor/ssh_notify.sh
+# ==========================================
 cat << 'SSH_EOF' > "$INSTALL_DIR/ssh_notify.sh"
 #!/usr/bin/env bash
 source /etc/vps_monitor.conf
@@ -178,6 +168,7 @@ LOGIN_IP="${PAM_RHOST:-$SSH_CLIENT}"
 LOGIN_USER="${PAM_USER:-$USER}"
 CURRENT_TIME="$(date '+%Y-%m-%d %H:%M:%S')"
 
+# 区分登录与退出事件
 if [ "${PAM_TYPE:-}" = "close_session" ]; then
     TITLE="🚪 VPS SSH 会话已断开"
     BODY="用户: \`${LOGIN_USER}\`%0A来源IP: \`${LOGIN_IP}\`%0A时间: \`${CURRENT_TIME}\`"
@@ -187,56 +178,30 @@ else
 fi
 
 MESSAGE="*${TITLE}*%0A${BODY}"
+
 curl -s -X POST "$API_URL" -d "chat_id=${CHAT_ID}" --data-urlencode "text=${MESSAGE}" -d "parse_mode=Markdown" >/dev/null &
 SSH_EOF
 
 chmod +x "$INSTALL_DIR/ssh_notify.sh"
 
-# 3. 写入断网控制脚本
-cat << 'NET_EOF' > "$INSTALL_DIR/net_control.sh"
-#!/usr/bin/env bash
-source /etc/vps_monitor.conf
-ACTION="${1:-}"
-
-if [ "$ACTION" = "stop" ]; then
-    iptables -I INPUT -i "$INTERFACE" -j DROP 2>/dev/null || true
-    iptables -I OUTPUT -o "$INTERFACE" -j DROP 2>/dev/null || true
-    echo "$(date): 防火墙已拦截所有网络流量 (防扣费生效)" >> /var/log/vps_net_control.log
-elif [ "$ACTION" = "start" ]; then
-    iptables -D INPUT -i "$INTERFACE" -j DROP 2>/dev/null || true
-    iptables -D OUTPUT -o "$INTERFACE" -j DROP 2>/dev/null || true
-    echo "$(date): 网络流量已恢复" >> /var/log/vps_net_control.log
-fi
-NET_EOF
-
-chmod +x "$INSTALL_DIR/net_control.sh"
-
-# 4. 绑定 SSH 钩子
+# 3. 绑定 SSH PAM 钩子
 if ! grep -q "pam_exec.so seteuid $INSTALL_DIR/ssh_notify.sh" /etc/pam.d/sshd; then
     echo "session optional pam_exec.so seteuid $INSTALL_DIR/ssh_notify.sh" >> /etc/pam.d/sshd
     echo "✅ SSH 登录/退出实时通知已绑定成功"
 fi
 
 # ==========================================
-# 5. 安全规范配置 Crontab 定时任务（加入空值保护与防错校验）
+# 4. 配置干净且精准的 Crontab 定时任务（彻底解决刷屏问题）
 # ==========================================
-crontab -l 2>/dev/null | grep -v "vps_monitor.sh" | grep -v "net_control.sh" | crontab -
+crontab -l 2>/dev/null | grep -v "vps_monitor.sh" | crontab -
 
 (crontab -l 2>/dev/null; echo "*/5 * * * * /bin/bash $INSTALL_DIR/vps_monitor.sh") | crontab -
 (crontab -l 2>/dev/null; echo "0 0,15 * * * /bin/bash $INSTALL_DIR/vps_monitor.sh report") | crontab -
 
-# 严格校验断网时间变量是否为纯数字，防止 crontab 报错
-if [ "$ENABLE_NET_LIMIT" = "true" ] && [[ "$net_stop_hour" =~ ^[0-9]+$ ]] && [[ "$net_start_hour" =~ ^[0-9]+$ ]]; then
-    (crontab -l 2>/dev/null; echo "0 $net_stop_hour * * * /bin/bash $INSTALL_DIR/net_control.sh stop") | crontab -
-    (crontab -l 2>/dev/null; echo "0 $net_start_hour * * * /bin/bash $INSTALL_DIR/net_control.sh start") | crontab -
-    echo "✅ 定时断网防扣费已启用: 每天 ${net_stop_hour}:00 至 ${net_start_hour}:00 自动拦截流量"
-fi
-
-echo "✅ 定时任务配置成功"
-
+echo "✅ 定时任务配置成功（巡检每5分钟一次，流量报告仅在0点和15点精准触发一次）"
 
 # ==========================================
-# 6. 注册全局一键更新命令 vps-update
+# 5. 注册全局一键更新命令 vps-update
 # ==========================================
 cat << UPDATE_EOF > /usr/local/bin/vps-update
 #!/bin/bash
@@ -250,6 +215,6 @@ chmod +x /usr/local/bin/vps-update
 echo ""
 echo "=========================================="
 echo "🎉 脚本安装与更新全部完成！"
-echo "👉 以后升级只需在终端敲入: vps-update"
+echo "👉 手动触发流量报告命令: bash $INSTALL_DIR/vps_monitor.sh report"
+echo "👉 以后升级只需在任意终端敲入: vps-update"
 echo "=========================================="
-
