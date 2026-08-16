@@ -1,3 +1,5 @@
-payload:
-  - DOMAIN-KEYWORD,clubsim
-  DOMAIN,api.cloudflare.com
+domain_keyword_set:
+  - clubsim
+
+  domain_set:
+  - api.cloudflare.com
