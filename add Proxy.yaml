@@ -1,13 +1,13 @@
 domain_keyword_set:
-  - redircdn
-  - v2ex
+- redircdn
+- v2ex
 domain_suffix:
-  - nodeseek.com
-  - t66y.com
-  - t66ymirror.com
-  - feedx.net
-  - buzzing.cc
-  - 655424.xyz
-  - 23img.com
+- nodeseek.com
+- t66y.com
+- t66ymirror.com
+- feedx.net
+- buzzing.cc
+- 655424.xyz
+- 23img.com
 domain_set:
-  - cdn.jsdelivr.net
+- cdn.jsdelivr.net
