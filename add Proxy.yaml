@@ -4,7 +4,9 @@ domain_keyword_set:
   - 23img
   - redircdn
   - v2ex
-  domain_suffix:
+domain_suffix:
   - feedx.net
   - buzzing.cc
   - 655424.xyz
+domain_set:
+  - cdn.jsdelivr.net
