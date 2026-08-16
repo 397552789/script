@@ -1,9 +1,10 @@
 domain_keyword_set:
-  - nodeseek
-  - t66y
   - redircdn
   - v2ex
 domain_suffix:
+  - nodeseek.com
+  - t66y.com
+  - t66ymirror.com
   - feedx.net
   - buzzing.cc
   - 655424.xyz
