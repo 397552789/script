@@ -1,9 +1,11 @@
-domain_keyword_set:
-- redircdn
-- v2ex
+#domain_keyword_set:
+#- redircdn
+#- v2ex
 
 domain_suffix_set:
 - nodeseek.com
+- v2ex.co
+- v2ex.com
 - yfamilys.com
 - t66y.com
 - t66ymirror.com
