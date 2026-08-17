@@ -3,6 +3,8 @@ domain_keyword_set:
 - wangmoyu
 
 domain_suffix_set:
+- apple-relay.fastly-edge.com
+- shuyz.com
 - mac52ipod.cn
 - appinn.com
 - jandan.net
