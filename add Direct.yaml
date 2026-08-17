@@ -1,9 +1,10 @@
-domain_keyword_set:
-- clubsim
-- wangmoyu
+#domain_keyword_set:
+#- clubsim
+#- wangmoyu
 
 domain_suffix_set:
 - apple-relay.fastly-edge.com
+- cdn.dfyun.com.cn
 - shuyz.com
 - mac52ipod.cn
 - appinn.com
