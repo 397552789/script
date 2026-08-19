@@ -1,6 +1,8 @@
 #domain_keyword_set:
 #- clubsim
 #- wangmoyu
+domain_set:
+- egernlicense.com
 
 domain_suffix_set:
 - apple-relay.fastly-edge.com
