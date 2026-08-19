@@ -1,7 +1,6 @@
 #domain_keyword_set:
 #- redircdn
 #- v2ex
-
 domain_suffix_set:
 - nodeseek.com
 - v2ex.co
@@ -16,4 +15,6 @@ domain_suffix_set:
 - 23img.com
 
 domain_set:
+- npm.3597823.xyz
+- gss.3597823.xyz
 - cdn.jsdelivr.net
