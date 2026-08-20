@@ -1,10 +1,10 @@
 #domain_keyword_set:
 #- clubsim
 #- wangmoyu
-domain_set:
-- egernlicense.com
+#domain_set:
 
 domain_suffix_set:
+- egernlicense.com
 - apple-relay.fastly-edge.com
 - cdn.dfyun.com.cn
 - shuyz.com
